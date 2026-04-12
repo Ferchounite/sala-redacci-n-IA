@@ -1,0 +1,80 @@
+{
+  "entities": {
+    "Article": {
+      "title": "Article",
+      "description": "A discovered news article from RSS or NewsAPI.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
+        "source": { "type": "string" },
+        "publishedAt": { "type": "string", "format": "date-time" },
+        "summary": { "type": "string" },
+        "relevanceScore": { "type": "number" },
+        "status": { "type": "string", "enum": ["new", "drafted", "published"] },
+        "uid": { "type": "string", "description": "Owner UID" }
+      },
+      "required": ["title", "url", "uid"]
+    },
+    "Draft": {
+      "title": "Draft",
+      "description": "An AI-generated draft for a WordPress post.",
+      "type": "object",
+      "properties": {
+        "articleId": { "type": "string" },
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "meta_description": { "type": "string" },
+        "primary_keyword": { "type": "string" },
+        "status": { "type": "string", "enum": ["draft", "ready", "published"] },
+        "siteId": { "type": "string" },
+        "publishedUrl": { "type": "string" },
+        "uid": { "type": "string" }
+      },
+      "required": ["title", "content", "uid"]
+    },
+    "WPSite": {
+      "title": "WPSite",
+      "description": "WordPress site configuration and credentials.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
+        "username": { "type": "string" },
+        "applicationPassword": { "type": "string" },
+        "uid": { "type": "string" }
+      },
+      "required": ["name", "url", "username", "applicationPassword", "uid"]
+    },
+    "RSSSource": {
+      "title": "RSSSource",
+      "description": "RSS feed source for news discovery.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "url": { "type": "string", "format": "uri" },
+        "uid": { "type": "string" },
+        "active": { "type": "boolean" }
+      },
+      "required": ["name", "url", "uid"]
+    }
+  },
+  "firestore": {
+    "/articles/{articleId}": {
+      "schema": "Article",
+      "description": "Collection of discovered news articles."
+    },
+    "/drafts/{draftId}": {
+      "schema": "Draft",
+      "description": "Collection of AI-generated drafts."
+    },
+    "/sites/{siteId}": {
+      "schema": "WPSite",
+      "description": "Collection of WordPress site configurations."
+    },
+    "/rss_sources/{sourceId}": {
+      "schema": "RSSSource",
+      "description": "Collection of RSS feed sources."
+    }
+  }
+}

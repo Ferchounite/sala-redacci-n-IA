@@ -1,0 +1,111 @@
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: articles
+// Fields:
+//   - title: string (required)
+//   - url: string (required)
+//   - source: string
+//   - publishedAt: string
+//   - summary: string
+//   - relevanceScore: number
+//   - status: string (new, drafted, published)
+//   - uid: string (required)
+//
+// Collection: drafts
+// Fields:
+//   - articleId: string
+//   - title: string (required)
+//   - content: string (required)
+//   - status: string (draft, ready, published)
+//   - siteId: string
+//   - publishedUrl: string
+//   - uid: string (required)
+//
+// Collection: sites
+// Fields:
+//   - name: string (required)
+//   - url: string (required)
+//   - username: string (required)
+//   - applicationPassword: string (required)
+//   - uid: string (required)
+//
+// ===============================================================
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }
+
+    function isValidArticle(data) {
+      return data.title is string && data.title.size() > 0 && data.title.size() < 500 &&
+             data.url is string && data.url.size() > 0 &&
+             data.uid == request.auth.uid;
+    }
+
+    function isValidDraft(data) {
+      return data.title is string && data.title.size() > 0 &&
+             data.content is string && data.content.size() > 0 &&
+             data.uid == request.auth.uid;
+    }
+
+    function isValidSite(data) {
+      return data.name is string && data.name.size() > 0 &&
+             data.url is string && data.url.size() > 0 &&
+             data.username is string &&
+             data.applicationPassword is string &&
+             data.uid == request.auth.uid;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /articles/{articleId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && isValidArticle(request.resource.data);
+      allow update: if isDocOwner() && isValidArticle(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /drafts/{draftId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && isValidDraft(request.resource.data);
+      allow update: if isDocOwner() && isValidDraft(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /sites/{siteId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && isValidSite(request.resource.data);
+      allow update: if isDocOwner() && isValidSite(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /rss_sources/{sourceId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && request.resource.data.uid == request.auth.uid;
+      allow update: if isDocOwner();
+      allow delete: if isDocOwner();
+    }
+
+    match /users/{userId} {
+      allow read, write: if isOwner(userId);
+    }
+  }
+}
