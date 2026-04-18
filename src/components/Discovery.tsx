@@ -45,13 +45,16 @@ export default function Discovery({ user }: { user: User }) {
   useEffect(() => {
     const q = query(
       collection(db, 'articles'),
-      where('uid', '==', user.uid),
-      orderBy('publishedAt', 'desc')
+      where('uid', '==', user.uid)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Article));
-      setArticles(docs);
+      // Sort in memory to avoid needing a composite index in Firestore
+      const sorted = docs.sort((a, b) => 
+        new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
+      );
+      setArticles(sorted);
       setLoading(false);
     });
 
@@ -61,52 +64,58 @@ export default function Discovery({ user }: { user: User }) {
   const handleRefresh = async () => {
     setRefreshing(true);
     try {
-      const activeUrls = rssSources.map(s => s.url).join(',');
+      const activeUrls = rssSources.map(s => s.url).filter(Boolean).join(',');
       const url = activeUrls ? `/api/news?feeds=${encodeURIComponent(activeUrls)}` : '/api/news';
       
+      console.log("Fetching news from:", url);
       const response = await fetch(url);
-      if (!response.ok) throw new Error('Failed to fetch news');
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to fetch news: ${errorText}`);
+      }
       
       const news = await response.json();
+      console.log(`Received ${news.length} articles from API`);
       
+      // Get all existing URLs to avoid duplicate checks inside the loop against stale state
+      const existingUrls = new Set(articles.map(a => a.url));
+      let addedCount = 0;
+
       for (const item of news) {
-        // Check if article already exists by URL
-        const exists = articles.some(a => a.url === item.url);
-        if (!exists) {
-          // Calculate a more logical relevance score (Senior SEO Logic)
-          let score = 75; // Base score
-          
-          // 1. Recency Bonus (Freshness is key for news)
+        if (!existingUrls.has(item.url)) {
+          // Calculate a relevance score
+          let score = 75;
           const pubDate = new Date(item.publishedAt);
           const hoursAgo = (new Date().getTime() - pubDate.getTime()) / (1000 * 60 * 60);
+          
           if (hoursAgo < 6) score += 15;
           else if (hoursAgo < 12) score += 10;
-          else if (hoursAgo < 24) score += 5;
-
-          // 2. Keyword Authority (Trending topics)
-          const trendingKeywords = ['ai', 'inteligencia artificial', 'apple', 'google', 'nvidia', 'tesla', 'openai', 'gpt'];
+          
+          const trendingKeywords = ['ai', 'inteligencia artificial', 'apple', 'google', 'nvidia', 'openai', 'gpt'];
           const titleLower = item.title.toLowerCase();
-          if (trendingKeywords.some(kw => titleLower.includes(kw))) {
-            score += 10;
-          }
-
-          // 3. Impact/Length
-          if (item.title.length > 60) score += 5;
-
-          // Cap at 99
-          const finalScore = Math.min(score, 99);
+          if (trendingKeywords.some(kw => titleLower.includes(kw))) score += 10;
 
           await addDoc(collection(db, 'articles'), {
             ...item,
-            relevanceScore: finalScore,
+            relevanceScore: Math.min(score, 99),
             status: 'new',
-            uid: user.uid
+            uid: user.uid,
+            fetchedAt: new Date().toISOString()
           });
+          
+          existingUrls.add(item.url); // Mark as added for this batch
+          addedCount++;
         }
+      }
+      
+      if (addedCount === 0) {
+        alert("No se encontraron noticias nuevas en este momento.");
+      } else {
+        console.log(`Added ${addedCount} new articles`);
       }
     } catch (error) {
       console.error("Refresh failed", error);
-      alert("Error al conectar con las fuentes de noticias reales. Por favor intenta de nuevo.");
+      alert("Error al conectar con las fuentes de noticias. Asegúrate de que las URLs RSS sean válidas.");
     } finally {
       setRefreshing(false);
     }
@@ -123,6 +132,7 @@ export default function Discovery({ user }: { user: User }) {
       await addDoc(collection(db, 'drafts'), {
         articleId: article.id,
         title: draftData.title,
+        seo_title: draftData.seo_title || draftData.title,
         content: draftData.content,
         meta_description: draftData.meta_description || "",
         primary_keyword: draftData.primary_keyword || "",

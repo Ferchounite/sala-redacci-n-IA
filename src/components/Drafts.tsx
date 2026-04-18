@@ -23,7 +23,10 @@ import {
   ExternalLink, 
   X,
   Globe,
-  AlertCircle
+  AlertCircle,
+  RefreshCw,
+  Upload,
+  Image as ImageIcon
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '../lib/utils';
@@ -36,6 +39,7 @@ export default function Drafts({ user }: { user: User }) {
   const [editingDraft, setEditingDraft] = useState<Draft | null>(null);
   const [publishingId, setPublishingId] = useState<string | null>(null);
   const [selectedSiteId, setSelectedSiteId] = useState<string>('');
+  const [generatingImage, setGeneratingImage] = useState(false);
 
   useEffect(() => {
     const q = query(
@@ -77,9 +81,25 @@ export default function Drafts({ user }: { user: User }) {
     
     await updateDoc(doc(db, 'drafts', editingDraft.id), {
       title: editingDraft.title,
-      content: editingDraft.content
+      content: editingDraft.content,
+      seo_title: editingDraft.seo_title,
+      meta_description: editingDraft.meta_description,
+      primary_keyword: editingDraft.primary_keyword,
+      featured_image: editingDraft.featured_image,
+      image_prompt: editingDraft.image_prompt
     });
     setEditingDraft(null);
+  };
+
+  const handleCustomImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !editingDraft) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setEditingDraft(prev => prev ? { ...prev, featured_image: reader.result as string } : null);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handlePublish = async (draft: Draft) => {
@@ -253,6 +273,86 @@ export default function Drafts({ user }: { user: User }) {
                   className="w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-4 py-3 focus:outline-none focus:border-orange-500/50"
                 />
               </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-widest text-orange-500">Título SEO (Yoast)</label>
+                  <input 
+                    type="text" 
+                    value={editingDraft.seo_title || ''}
+                    onChange={(e) => setEditingDraft({ ...editingDraft, seo_title: e.target.value })}
+                    className="w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-4 py-3 focus:outline-none focus:border-orange-500/50"
+                    placeholder="Título para buscadores"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-widest text-orange-500">Frase Clave Objetivo (Yoast)</label>
+                  <input 
+                    type="text" 
+                    value={editingDraft.primary_keyword || ''}
+                    onChange={(e) => setEditingDraft({ ...editingDraft, primary_keyword: e.target.value })}
+                    className="w-full bg-[#0a0a0a] border border-[#222] rounded-xl px-4 py-3 focus:outline-none focus:border-orange-500/50"
+                    placeholder="Keyword principal"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs font-bold uppercase tracking-widest text-orange-500">Meta Descripción (Yoast)</label>
+                <textarea 
+                  value={editingDraft.meta_description || ''}
+                  onChange={(e) => setEditingDraft({ ...editingDraft, meta_description: e.target.value })}
+                  className="w-full h-20 bg-[#0a0a0a] border border-[#222] rounded-xl px-4 py-3 focus:outline-none focus:border-orange-500/50 resize-none"
+                  placeholder="Descripción para Google"
+                />
+              </div>
+
+              {/* Featured Image Section */}
+              <div className="space-y-4 bg-[#0a0a0a] border border-[#222] rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-xs font-bold uppercase tracking-widest text-gray-500 flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4" />
+                    Imagen Destacada
+                  </label>
+                  <div className="flex gap-2">
+                    <label className="cursor-pointer bg-[#222] hover:bg-[#333] text-xs font-bold px-3 py-1.5 rounded-lg transition-colors flex items-center gap-2">
+                      <Upload className="w-3.5 h-3.5" />
+                      Subir Propia
+                      <input type="file" className="hidden" accept="image/*" onChange={handleCustomImageUpload} />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="relative aspect-video bg-[#050505] rounded-xl overflow-hidden border border-[#222] group shadow-inner">
+                  {editingDraft.featured_image ? (
+                    <img 
+                      src={editingDraft.featured_image} 
+                      alt="Preview" 
+                      className="w-full h-full object-cover transition-all duration-700"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-700">
+                      <ImageIcon className="w-12 h-12 mb-2 opacity-10" />
+                      <p className="text-xs font-medium">Sin imagen seleccionada</p>
+                      <p className="text-[10px] text-gray-500 mt-1 max-w-[200px] text-center px-4">
+                        Se generará una imagen automáticamente al publicar si no subes una propia.
+                      </p>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold uppercase tracking-widest text-gray-600">Prompt de la IA (se usará al publicar)</label>
+                  <textarea 
+                    value={editingDraft.image_prompt || ''}
+                    onChange={(e) => setEditingDraft({ ...editingDraft, image_prompt: e.target.value })}
+                    className="w-full bg-[#111] border border-[#222] rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-orange-500/30 font-mono text-gray-400"
+                    rows={2}
+                  />
+                </div>
+              </div>
+
               <div className="space-y-2 flex-1 flex flex-col">
                 <label className="text-xs font-bold uppercase tracking-widest text-gray-500">Contenido (HTML)</label>
                 <textarea 

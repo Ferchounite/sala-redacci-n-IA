@@ -38,7 +38,8 @@ import {
   Trash2,
   Edit3,
   Send,
-  Loader2
+  Loader2,
+  Sparkles
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
@@ -47,6 +48,7 @@ import Discovery from './components/Discovery';
 import Drafts from './components/Drafts';
 import Sites from './components/Sites';
 import RSSManager from './components/RSSManager';
+import ContentHub from './components/ContentHub';
 import { Rss } from 'lucide-react';
 
 export default function App() {
@@ -141,6 +143,12 @@ export default function App() {
             onClick={() => setCurrentView('discovery')} 
           />
           <NavItem 
+            icon={<Sparkles className="w-5 h-5" />} 
+            label="Content Hub" 
+            active={currentView === 'content-hub'} 
+            onClick={() => setCurrentView('content-hub')} 
+          />
+          <NavItem 
             icon={<FileText className="w-5 h-5" />} 
             label="Borradores" 
             active={currentView === 'drafts'} 
@@ -205,6 +213,7 @@ export default function App() {
               className="max-w-6xl mx-auto"
             >
               {currentView === 'discovery' && <Discovery user={user} />}
+              {currentView === 'content-hub' && <ContentHub user={user} />}
               {currentView === 'drafts' && <Drafts user={user} />}
               {currentView === 'sites' && <Sites user={user} />}
               {currentView === 'rss' && <RSSManager user={user} />}

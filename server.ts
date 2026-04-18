@@ -14,6 +14,23 @@ async function startServer() {
 
   app.use(express.json());
 
+  // API Route to generate an image on demand
+  app.post("/api/generate-image", async (req, res) => {
+    const { prompt } = req.body;
+    if (!prompt) return res.status(400).json({ error: "Prompt is required" });
+
+    try {
+      const encodedPrompt = encodeURIComponent(prompt);
+      // Use 1280x720 (16:9) to match standard video aspect ratios and avoid distortion
+      // Adding a random seed ensures we get a fresh image every time
+      const seed = Math.floor(Math.random() * 1000000);
+      const aiImageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1280&height=720&nologo=true&seed=${seed}&model=flux`;
+      res.json({ url: aiImageUrl });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to generate image" });
+    }
+  });
+
   // API Route to publish to WordPress with AI Generated Image
   app.post("/api/publish", async (req, res) => {
     const { site, draft } = req.body;
@@ -27,46 +44,55 @@ async function startServer() {
 
       let featuredMediaId = null;
 
-      // 1. Generate Image with Imagen 3 if prompt exists
-      if (draft.image_prompt) {
+      // 1. Handle Featured Image (Manual URL or AI Prompt)
+      let imageUrl = draft.featured_image;
+      
+      // If no manual image, but there's a prompt, generate one
+      // We use a seed to ensure it's not a cached version if it's the first time
+      if (!imageUrl && draft.image_prompt) {
+        const seed = Math.floor(Math.random() * 1000000);
+        const enhancedPrompt = `${draft.image_prompt}, high quality, professional, 8k resolution`;
+        imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=1280&height=720&nologo=true&seed=${seed}&model=flux`;
+      }
+
+      if (imageUrl) {
         try {
-          console.log("Generating AI image with Imagen 3...");
-          const result = await genAI.models.generateContent({
-            model: "imagen-3",
-            contents: draft.image_prompt
+          console.log("Fetching image for WP upload:", imageUrl);
+          const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+          const imageBuffer = Buffer.from(imageResponse.data, 'binary');
+          
+          const mediaResponse = await axios.post(`${site.url}/wp-json/wp/v2/media`, imageBuffer, {
+            headers: {
+              ...headers,
+              'Content-Type': 'image/jpeg',
+              'Content-Disposition': `attachment; filename="featured-${Date.now()}.jpg"`
+            }
           });
-          const response = result;
-          
-          // Assuming the model returns the image as a base64 or similar in the response
-          // Note: In some SDK versions, you might need to handle the specific image output format
-          const imagePart = response.candidates?.[0]?.content?.parts?.find(p => p.inlineData);
-          
-          if (imagePart?.inlineData) {
-            const imageBuffer = Buffer.from(imagePart.inlineData.data, 'base64');
-            
-            console.log("Uploading AI image to WP...");
-            const mediaResponse = await axios.post(`${site.url}/wp-json/wp/v2/media`, imageBuffer, {
-              headers: {
-                ...headers,
-                'Content-Type': 'image/jpeg',
-                'Content-Disposition': `attachment; filename="ai-featured-${Date.now()}.jpg"`
-              }
-            });
-            featuredMediaId = mediaResponse.data.id;
-          }
+          featuredMediaId = mediaResponse.data.id;
         } catch (imageError) {
-          console.error("Error generating/uploading AI image:", imageError);
-          // Fallback to stock if AI fails
+          console.error("Error uploading image to WP:", imageError);
         }
       }
 
-      // 2. Create Post
+      // 2. Create Post with Yoast SEO Meta
+      // Note: WordPress REST API blocks meta keys starting with _ by default.
+      // We send them as standard meta. If they don't save, the user needs to register them in functions.php
       const postResponse = await axios.post(`${site.url}/wp-json/wp/v2/posts`, {
         title: draft.title,
         content: draft.content,
         status: 'publish',
         featured_media: featuredMediaId,
-        excerpt: draft.meta_description
+        excerpt: draft.meta_description,
+        meta: {
+          // Standard Yoast Meta Keys
+          _yoast_wpseo_focuskw: draft.primary_keyword,
+          _yoast_wpseo_title: draft.seo_title,
+          _yoast_wpseo_metadesc: draft.meta_description,
+          // Fallback keys (some REST API extensions use these)
+          yoast_wpseo_focuskw: draft.primary_keyword,
+          yoast_wpseo_title: draft.seo_title,
+          yoast_wpseo_metadesc: draft.meta_description
+        }
       }, { headers });
 
       res.json({ link: postResponse.data.link });

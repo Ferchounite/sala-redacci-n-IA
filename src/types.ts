@@ -16,6 +16,7 @@ export interface Draft {
   title: string;
   content: string;
   meta_description?: string;
+  seo_title?: string;
   primary_keyword?: string;
   image_prompt?: string;
   featured_image?: string;
@@ -43,4 +44,4 @@ export interface RSSSource {
   active: boolean;
 }
 
-export type View = 'discovery' | 'drafts' | 'sites' | 'rss' | 'settings';
+export type View = 'discovery' | 'drafts' | 'sites' | 'rss' | 'settings' | 'content-hub';
